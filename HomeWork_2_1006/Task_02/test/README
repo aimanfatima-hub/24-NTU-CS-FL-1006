@@ -1,0 +1,111 @@
+# Homework 2 – Dual-LED PWM Control with OLED Monitoring
+
+**Course:** Embedded IoT Systems
+**Name:** <Your Name> | **ID:** <Your ID>
+
+An ESP32 fades two LEDs using two different PWM frequencies (LEDC peripheral) and shows each LED's live duty cycle and configured frequency on an SSD1306 I²C OLED. Tested in Wokwi and on physical hardware.
+
+## Links
+- **Wokwi project:** <paste working Wokwi link>
+- **GitHub repository:** <paste repository link>
+
+## Project structure
+```
+Homework-2/
+├── diagram.json
+├── wokwi.toml
+├── platformio.ini
+├── src/
+│   └── main.cpp
+├── screenshots/
+│   ├── wokwi_circuit.png
+│   ├── wokwi_running_oled.png
+│   ├── hardware_circuit.jpg
+│   └── hardware_oled_output.jpg
+└── README.md
+```
+
+## Wiring
+
+| Signal | ESP32 GPIO | Connection |
+|--------|-----------|------------|
+| LED 1 | GPIO 18 | 330 Ω resistor → LED 1 anode; cathode → GND |
+| LED 2 | GPIO 19 | 330 Ω resistor → LED 2 anode; cathode → GND |
+| OLED SDA | GPIO 21 | SSD1306 SDA |
+| OLED SCL | GPIO 22 | SSD1306 SCL |
+| OLED VCC | 3V3 | SSD1306 VCC |
+| OLED GND | GND | SSD1306 GND |
+
+- Each LED has its **own** current-limiting resistor.
+- OLED I²C address: `0x3C`.
+- Hardware pins: <same as simulation / list any changes and why>.
+
+## PWM frequencies
+
+| LED | Frequency | Resolution | LEDC channel | LEDC timer |
+|-----|-----------|-----------|--------------|-----------|
+| LED 1 | 1000 Hz | 10-bit (0–1023) | 0 | 0 |
+| LED 2 | 5000 Hz | 10-bit (0–1023) | 2 | 1 |
+
+**Resolution choice:** the LEDC timer clock is 80 MHz, so frequency × 2^bits must be ≤ 80 MHz. 10 bits gives 1024 smooth brightness levels, well within the limit at both frequencies (1 kHz × 1024 ≈ 1 MHz, 5 kHz × 1024 ≈ 5 MHz).
+
+**LEDC timer-sharing limitation:** the ESP32 has only 4 LEDC timers per speed group, and every channel on a timer shares its frequency and resolution. The Arduino-ESP32 core pairs channels onto timers (channels 0 and 1 share a timer, 2 and 3 share the next, and so on). Using channels 0 and 1 would force both LEDs to the same frequency, so LED 1 uses channel 0 and LED 2 uses channel 2, which sit on different timers. Other chip variants (S2/S3/C3) have different channel/timer layouts and should be re-checked. API used: Arduino-ESP32 core 3.x (`ledcAttachChannel`, `ledcWrite(pin, duty)`).
+
+## How PWM affects the LEDs
+- **Duty cycle** is the fraction of each period the output is HIGH. The eye averages the fast switching, so a higher duty cycle means more average power and a brighter LED.
+- **Frequency** sets the period (1 kHz = 1 ms, 5 kHz = 200 µs) but not the average brightness. Both frequencies are fast enough to look flicker-free; a higher frequency reduces the maximum possible resolution.
+
+## Duty-cycle control
+- Non-blocking fade using `millis()`: duty changes by 8 counts every 15 ms (one full sweep ≈ 1.9 s).
+- LED 1 fades 0 % → 100 % → 0 %; LED 2 runs in the opposite phase (100 % → 0 % → 100 %).
+- The duty values are kept in the global variables `duty1` and `duty2`, and percentage = duty / 1023 × 100.
+
+## OLED output
+The 128×64 SSD1306 shows:
+
+```
+PWM MONITOR
+LED1:  25% F:1000Hz
+LED2:  75% F:5000Hz
+```
+(plus a progress bar under each row). The values change continuously. The display reads the duty and frequency back from the LEDC hardware (`ledcRead()`, `ledcReadFreq()`), so it shows what is actually in use. The screen refreshes every 100 ms, and the Serial Monitor (115200 baud) prints the same values for cross-checking.
+
+## Build and run
+- **Wokwi / PlatformIO:** open the project, build, and start the simulation.
+- **Libraries:** Adafruit SSD1306, Adafruit GFX (see `platformio.ini`).
+- **Hardware:** upload `src/main.cpp` to the ESP32 and open the Serial Monitor at 115200 baud.
+
+## Screenshots and photos
+
+**Wokwi circuit**
+![Wokwi circuit](screenshots/wokwi_circuit.png)
+
+**Wokwi simulation running with OLED**
+![Wokwi running](screenshots/wokwi_running_oled.png)
+
+**Hardware circuit**
+![Hardware circuit](screenshots/hardware_circuit.jpg)
+
+**Hardware OLED output**
+![Hardware OLED](screenshots/hardware_oled_output.jpg)
+
+## Test results
+
+| Test | Expected | Wokwi | Hardware |
+|------|----------|-------|----------|
+| LED 1 fades 0 → 100 % → 0 | Smooth, ≈1.9 s per sweep | [Pass/Fail] | [Pass/Fail] |
+| LED 2 fades in opposite phase | Rises while LED 1 falls | [Pass/Fail] | [Pass/Fail] |
+| LED 1 frequency on OLED | 1000 Hz | [Pass/Fail] | [Pass/Fail] |
+| LED 2 frequency on OLED | 5000 Hz | [Pass/Fail] | [Pass/Fail] |
+| OLED duty % updates live | Changes ~10×/s | [Pass/Fail] | [Pass/Fail] |
+| OLED matches Serial Monitor | Same values | [Pass/Fail] | [Pass/Fail] |
+
+## Wokwi vs hardware
+
+| Aspect | Wokwi | Hardware |
+|--------|-------|----------|
+| Pins | <what you used> | <what you used> |
+| LED brightness | <observation> | <observation> |
+| OLED | <observation> | <observation> |
+| Other differences | <observation> | <observation> |
+
